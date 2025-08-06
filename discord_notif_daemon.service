@@ -1,0 +1,12 @@
+[Unit]
+Description=Discord Notification Daemon
+After=network.target
+
+[Service]
+ExecStart=python /home/user/gitclones/discord_notif_daemon/discord_notif_daemon.py
+Type=notify
+Restart=always
+
+[Install]
+WantedBy=default.target
+RequiredBy=network.target

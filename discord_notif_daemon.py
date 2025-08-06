@@ -18,8 +18,6 @@ GATEWAY_URL = "wss://gateway.discord.gg/?v=9&encoding=json"
 # Global variable to track shutdown
 SHUTDOWN_EVENT = asyncio.Event()
 
-
-
 async def is_program_running(program_name):
     for proc in psutil.process_iter(['name']):
         if proc.info['name'] == program_name:
