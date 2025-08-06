@@ -1,0 +1,8 @@
+websockets
+desktop-notifier
+aiohttp
+nuitka
+setuptools
+aiofiles
+psutil
+keyboard
