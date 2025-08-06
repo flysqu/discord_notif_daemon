@@ -4,6 +4,9 @@ A Python-based daemon that connects to the Discord Gateway to listen for message
 
 Trusted channels are configured by taking a bunch of channel ids and putting them into the trusted_channels.txt file within the .config/discord_notification_daemon folder, created at runtime (Folder and file). Channel id's can be added at runtime, you can add comments by placing a "#" at the start of the line. ALL MESSAGES SENT INTO THE TRUSTED CHANNELS WILL TRIGGER A NOTIFICATION!!! The reason this is needed is that this only connects to the discord websocket, and i dont have discord's internal api working so i cant see if the user has permission to ping use @everyone or @here.
 
+## Usecase
+Im going to be using this script on my Pixel 3a running postmarketOS. Theres no discord client for linux mobile that has background notification support right now so made this to get background notifications, thats why it turns itself off if it sees dissent running.
+
 ## Features
 
 - Connects to the Discord Gateway using WebSocket.
