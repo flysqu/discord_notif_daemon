@@ -3,14 +3,13 @@ import websockets
 import json
 import aiohttp
 import time
-from desktop_notifier import DesktopNotifier, Urgency, Icon
 from pathlib import Path
-import psutil # type: ignore
+import psutil  # type: ignore
 import signal
 import sys
 import select
+import subprocess  # For calling notify-send
 
-NOTIFIER = DesktopNotifier()
 USER_ID = None
 USER_TOKEN = "MTIzMDk4NDA1NTg4MTcyODAzNQ.GqtYEu.tWOcF5gHmKF9O2KTKnh7A5_E7h26z8jbQu4UjQ"
 GATEWAY_URL = "wss://gateway.discord.gg/?v=9&encoding=json"
@@ -28,7 +27,7 @@ async def get_avatar(author):
     avatar_hash = author.get("avatar")
     user_id = author["id"]
 
-    cache_dir = Path("~/.config/discord_notif_daemon/cache").expanduser()
+    cache_dir = Path("/home/flysqu/.config/discord_notif_daemon/cache").expanduser()
     cache_dir.mkdir(parents=True, exist_ok=True)
     cached_file = cache_dir / f"avatar_{user_id}.png"
 
@@ -36,7 +35,7 @@ async def get_avatar(author):
         return str(cached_file)
 
     url = f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.png"
-    filename = f"~/.config/discord_notif_daemon/cache/avatar_{user_id}.png"
+    filename = f"/home/flysqu/.config/discord_notif_daemon/cache/avatar_{user_id}.png"
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -51,7 +50,7 @@ async def get_avatar(author):
 
 async def is_trusted_channel(channel_id):
     try:
-        trusted_channels_path = Path("~/.config/discord_notif_daemon/trusted_channels.txt")
+        trusted_channels_path = Path("/home/flysqu/.config/discord_notif_daemon/trusted_channels.txt")
         if not trusted_channels_path.exists():
             print("trusted_channels.txt not found.")
             trusted_channels_path.parent.mkdir(parents=True, exist_ok=True)
@@ -108,15 +107,21 @@ async def handle_message(msg):
     channel_id = msg["channel_id"]
     print(f"[{channel_id}] {author}: {content}")
 
+    # Fetch the avatar image
     avatar_path = await get_avatar(msg["author"])
 
-    await NOTIFIER.send(
-        title=f"{author}",
-        message=content,
-        icon=Icon(path=Path(avatar_path)) if avatar_path else None,
-        urgency=Urgency.Normal
-    )
-
+    # Send notification using notify-send
+    try:
+        command = [
+            "notify-send",
+            "-a", "Discord",  # Set app name to "Discord"
+            "-i", avatar_path if avatar_path else "dialog-information",  # Use avatar image or fallback icon
+            f"{author}",  # Notification title
+            content  # Notification body
+        ]
+        subprocess.run(command, check=True)
+    except Exception as e:
+        print(f"Failed to send notification: {e}")
 
 async def listen():
     global USER_ID
