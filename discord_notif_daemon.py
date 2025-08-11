@@ -29,7 +29,7 @@ SHUTDOWN_EVENT = asyncio.Event()
 
 async def is_program_running(program_name):
     for proc in psutil.process_iter(['name']):
-        if proc.info['name'] == program_name:
+        if proc.info['name'] in program_name:
             return True
     return False
 
@@ -79,8 +79,6 @@ async def is_trusted_channel(channel_id):
 async def heartbeat(ws, interval):
     check_interval = 0.5  # Check every 0.5 seconds for quicker responsiveness
     elapsed_time = 0
-    dissent_running = False
-    print(await is_program_running(".dissent-wrappe"))
 
     while not SHUTDOWN_EVENT.is_set():
         try:
@@ -174,7 +172,7 @@ async def listen():
 
                     while not SHUTDOWN_EVENT.is_set():
                         # Check Dissent status first
-                        is_running = await is_program_running(".dissent-wrappe")
+                        is_running = await is_program_running("dissent")
                         
                         if is_running and not dissent_running:
                             print("Dissent is now running, Skipping messages until closed.")
