@@ -21,7 +21,7 @@ CONFIG_DIR = os.path.join(HOME_DIR, '.config', 'discord_notif_daemon')
 USER_ID = None
 USER_TOKEN = "MTIzMDk4NDA1NTg4MTcyODAzNQ.GqtYEu.tWOcF5gHmKF9O2KTKnh7A5_E7h26z8jbQu4UjQ"
 GATEWAY_URL = "wss://gateway.discord.gg/?v=9&encoding=json"
-DISSENT_PROCESS_NAME = ".dissent_"
+DISSENT_PROCESS_NAME = "dissent"
 DISSENT_RUNNING = False
 
 # Global variable to track shutdown
