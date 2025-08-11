@@ -10,9 +10,12 @@ import sys
 import select
 import subprocess  # For calling notify-send
 
+# GLOBAL VARIABLES
 USER_ID = None
-USER_TOKEN = ""
+USER_TOKEN = "MTIzMDk4NDA1NTg4MTcyODAzNQ.GqtYEu.tWOcF5gHmKF9O2KTKnh7A5_E7h26z8jbQu4UjQ"
 GATEWAY_URL = "wss://gateway.discord.gg/?v=9&encoding=json"
+DISSENT_PROCESS_NAME = ".dissent_wrappe"
+DISSENT_RUNNING = False
 
 # Global variable to track shutdown
 SHUTDOWN_EVENT = asyncio.Event()
@@ -69,17 +72,16 @@ async def is_trusted_channel(channel_id):
 async def heartbeat(ws, interval):
     check_interval = 0.5  # Check every 0.5 seconds for quicker responsiveness
     elapsed_time = 0
+    dissent_running = False
+    print(await is_program_running(".dissent-wrappe"))
 
     while not SHUTDOWN_EVENT.is_set():
         try:
-            if not await is_program_running(".dissent-wrappe"):
-                if elapsed_time >= interval / 1000:
-                    await ws.send(json.dumps({"op": 1, "d": None}))
-                    elapsed_time = 0  # Reset elapsed time after sending heartbeat
-                else:
-                    elapsed_time += check_interval
+            if elapsed_time >= interval / 1000:
+                await ws.send(json.dumps({"op": 1, "d": None}))
+                elapsed_time = 0  # Reset elapsed time after sending heartbeat
             else:
-                print("Skipping heartbeat as 'dissent' is running.")
+                elapsed_time += check_interval
 
             await asyncio.sleep(check_interval)
         except (websockets.ConnectionClosed, OSError):
@@ -127,18 +129,19 @@ async def listen():
     global USER_ID
     session = aiohttp.ClientSession()
     backoff = 1
+    dissent_running = False
 
     try:
         while not SHUTDOWN_EVENT.is_set():
             try:
-                async with websockets.connect(GATEWAY_URL, ssl=True, max_size=10 * 1024 * 1024) as ws:  # Ensure SSL verification
+                async with websockets.connect(GATEWAY_URL, ssl=True, max_size=10 * 1024 * 1024) as ws:
                     print("Connected to Discord Gateway")
-                    backoff = 1  # Reset backoff on successful connection
+                    backoff = 1
 
                     # Receive HELLO
                     hello = json.loads(await ws.recv())
                     hb_interval = hello["d"]["heartbeat_interval"]
-                    asyncio.create_task(heartbeat(ws, hb_interval))
+                    heartbeat_task = asyncio.create_task(heartbeat(ws, hb_interval))
 
                     # IDENTIFY
                     await ws.send(json.dumps({
@@ -163,17 +166,30 @@ async def listen():
                     }))
 
                     while not SHUTDOWN_EVENT.is_set():
-                        msg = await ws.recv()
-                        data = json.loads(msg)
-
-                        if data["t"] == "READY":
-                            USER_ID = data["d"]["user"]["id"]
-                            print(f"Logged in as: {data['d']['user']['username']} ({USER_ID})")
-
-                        elif data["op"] == 0 and data["t"] == "MESSAGE_CREATE":
-                            msg = data["d"]
-                            if await should_notify(msg, USER_ID):
-                                await handle_message(msg)
+                        # Check Dissent status first
+                        is_running = await is_program_running(".dissent-wrappe")
+                        
+                        if is_running and not dissent_running:
+                            print("Dissent is now running, Skipping messages until closed.")
+                            dissent_running = True
+                        elif not is_running and dissent_running:
+                            print("Dissent is closed.")
+                            dissent_running = False
+                        
+                        # Set a timeout for ws.recv() to allow checking Dissent status
+                        try:
+                            msg = await asyncio.wait_for(ws.recv(), timeout=0.5)
+                            if not dissent_running:  # Only process messages if Dissent is not running
+                                data = json.loads(msg)
+                                if data["t"] == "READY":
+                                    USER_ID = data["d"]["user"]["id"]
+                                    print(f"Logged in as: {data['d']['user']['username']} ({USER_ID})")
+                                elif data["op"] == 0 and data["t"] == "MESSAGE_CREATE":
+                                    msg = data["d"]
+                                    if await should_notify(msg, USER_ID):
+                                        await handle_message(msg)
+                        except asyncio.TimeoutError:
+                            continue  # Just continue to check Dissent status again
 
             except (websockets.ConnectionClosed, OSError, asyncio.TimeoutError) as e:
                 if SHUTDOWN_EVENT.is_set():
