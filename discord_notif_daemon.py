@@ -9,12 +9,19 @@ import signal
 import sys
 import select
 import subprocess  # For calling notify-send
+import os
+import pwd
+
+# Get current username and home directory
+USERNAME = pwd.getpwuid(os.getuid())[0]
+HOME_DIR = os.path.expanduser('~')
+CONFIG_DIR = os.path.join(HOME_DIR, '.config', 'discord_notif_daemon')
 
 # GLOBAL VARIABLES
 USER_ID = None
 USER_TOKEN = "MTIzMDk4NDA1NTg4MTcyODAzNQ.GqtYEu.tWOcF5gHmKF9O2KTKnh7A5_E7h26z8jbQu4UjQ"
 GATEWAY_URL = "wss://gateway.discord.gg/?v=9&encoding=json"
-DISSENT_PROCESS_NAME = ".dissent_wrappe"
+DISSENT_PROCESS_NAME = ".dissent_"
 DISSENT_RUNNING = False
 
 # Global variable to track shutdown
@@ -30,7 +37,7 @@ async def get_avatar(author):
     avatar_hash = author.get("avatar")
     user_id = author["id"]
 
-    cache_dir = Path("/home/flysqu/.config/discord_notif_daemon/cache").expanduser()
+    cache_dir = Path(os.path.join(CONFIG_DIR, 'cache'))
     cache_dir.mkdir(parents=True, exist_ok=True)
     cached_file = cache_dir / f"avatar_{user_id}.png"
 
@@ -38,7 +45,7 @@ async def get_avatar(author):
         return str(cached_file)
 
     url = f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.png"
-    filename = f"/home/flysqu/.config/discord_notif_daemon/cache/avatar_{user_id}.png"
+    filename = os.path.join(CONFIG_DIR, 'cache', f"avatar_{user_id}.png")
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -53,7 +60,7 @@ async def get_avatar(author):
 
 async def is_trusted_channel(channel_id):
     try:
-        trusted_channels_path = Path("/home/flysqu/.config/discord_notif_daemon/trusted_channels.txt")
+        trusted_channels_path = Path(os.path.join(CONFIG_DIR, 'trusted_channels.txt'))
         if not trusted_channels_path.exists():
             print("trusted_channels.txt not found.")
             trusted_channels_path.parent.mkdir(parents=True, exist_ok=True)
