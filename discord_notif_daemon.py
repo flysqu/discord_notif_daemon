@@ -29,7 +29,7 @@ SHUTDOWN_EVENT = asyncio.Event()
 
 async def is_program_running(program_name):
     for proc in psutil.process_iter(['name']):
-        if proc.info['name'] in program_name:
+        if program_name in proc.info['name']:
             return True
     return False
 
