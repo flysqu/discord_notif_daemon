@@ -11,7 +11,7 @@ import select
 import subprocess  # For calling notify-send
 
 USER_ID = None
-USER_TOKEN = "MTIzMDk4NDA1NTg4MTcyODAzNQ.GqtYEu.tWOcF5gHmKF9O2KTKnh7A5_E7h26z8jbQu4UjQ"
+USER_TOKEN = ""
 GATEWAY_URL = "wss://gateway.discord.gg/?v=9&encoding=json"
 
 # Global variable to track shutdown
