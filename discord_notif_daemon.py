@@ -108,7 +108,20 @@ async def should_notify(msg, user_id):
 
     return mentioned_you or trusted_channel or is_dm or is_gdm
 
-async def handle_message(msg):
+async def handle_message(msg, dissent_running):
+    # Double check if Dissent is running
+    is_running = await is_program_running("dissent")
+                        
+    if is_running and not dissent_running:
+        print("Dissent is now running, Skipping messages until closed.")
+        dissent_running = True
+    elif not is_running and dissent_running:
+        print("Dissent is closed.")
+        dissent_running = False
+
+    if dissent_running:
+        return
+
     author = msg["author"]["global_name"]
     content = msg["content"]
     channel_id = msg["channel_id"]
@@ -184,7 +197,7 @@ async def listen():
                         # Set a timeout for ws.recv() to allow checking Dissent status
                         try:
                             msg = await asyncio.wait_for(ws.recv(), timeout=0.5)
-                            if not dissent_running:  # Only process messages if Dissent is not running
+                            if not dissent_running: # Only process messages if Dissent is not running
                                 data = json.loads(msg)
                                 if data["t"] == "READY":
                                     USER_ID = data["d"]["user"]["id"]
@@ -192,16 +205,16 @@ async def listen():
                                 elif data["op"] == 0 and data["t"] == "MESSAGE_CREATE":
                                     msg = data["d"]
                                     if await should_notify(msg, USER_ID):
-                                        await handle_message(msg)
+                                        await handle_message(msg, dissent_running)
                         except asyncio.TimeoutError:
-                            continue  # Just continue to check Dissent status again
+                            continue
 
             except (websockets.ConnectionClosed, OSError, asyncio.TimeoutError) as e:
                 if SHUTDOWN_EVENT.is_set():
                     break
                 print(f"Disconnected: {e}. Reconnecting in {backoff}s...")
                 await asyncio.sleep(backoff)
-                backoff = min(backoff * 2, 60)  # Exponential backoff, max 60s
+                backoff = min(backoff * 2, 60)
 
             except asyncio.CancelledError:
                 print("Listener task cancelled.")
@@ -220,24 +233,21 @@ async def listen():
 async def wait_for_shutdown():
     print("Press 'q' to quit.")
     while not SHUTDOWN_EVENT.is_set():
-        # Use select to check if input is available
         if select.select([sys.stdin], [], [], 0.1)[0]:
             user_input = sys.stdin.read(1).strip()
             if user_input.lower() == 'q':
                 print("Shutdown triggered by 'q' key.")
                 SHUTDOWN_EVENT.set()
                 break
-        await asyncio.sleep(0.1)  # Small delay to prevent high CPU usage
+        await asyncio.sleep(0.1)
 
 def shutdown_handler(signal_received, frame):
     print("Shutdown signal received. Exiting...")
     SHUTDOWN_EVENT.set()
 
-# Register signal handlers for graceful shutdown
 signal.signal(signal.SIGINT, shutdown_handler)
 signal.signal(signal.SIGTERM, shutdown_handler)
 
-# Run the program
 async def main():
     await asyncio.gather(listen(), wait_for_shutdown())
 
