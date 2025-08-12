@@ -108,20 +108,7 @@ async def should_notify(msg, user_id):
 
     return mentioned_you or trusted_channel or is_dm or is_gdm
 
-async def handle_message(msg, dissent_running):
-    # Double check if Dissent is running
-    is_running = await is_program_running("dissent")
-                        
-    if is_running and not dissent_running:
-        print("Dissent is now running, Skipping messages until closed.")
-        dissent_running = True
-    elif not is_running and dissent_running:
-        print("Dissent is closed.")
-        dissent_running = False
-
-    if dissent_running:
-        return
-
+async def handle_message(msg):
     author = msg["author"]["global_name"]
     content = msg["content"]
     channel_id = msg["channel_id"]
@@ -205,7 +192,7 @@ async def listen():
                                 elif data["op"] == 0 and data["t"] == "MESSAGE_CREATE":
                                     msg = data["d"]
                                     if await should_notify(msg, USER_ID):
-                                        await handle_message(msg, dissent_running)
+                                        await handle_message(msg)
                         except asyncio.TimeoutError:
                             continue
 
