@@ -3,10 +3,10 @@ Description=Discord Notification Daemon
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 %h/discord_notif_daemon/discord_notif_daemon.py
+ExecStart=/usr/bin/python3 %h/gitclones/discord_notif_daemon/discord_notif_daemon.py
 Type=simple
 Restart=always
-WorkingDirectory=%h/discord_notif_daemon
+WorkingDirectory=%h/gitclones/discord_notif_daemon
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
