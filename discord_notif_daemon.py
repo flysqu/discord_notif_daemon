@@ -197,7 +197,8 @@ async def handle_message(msg):
                 hints = dbus.Dictionary({
                     'x-nemo-preview-summary': dbus.String(author),
                     'x-nemo-preview-body': dbus.String(messages[-1]),
-                    'category': dbus.String('im.received'),
+                    'category': dbus.String('x-nemo.messaging.im'),
+                    'x-nemo-feedback': dbus.String('messaging'),
                 }, signature='sv')
                 return int(iface.Notify(
                     'Discord', dbus.UInt32(notif_id), icon, author, body,
