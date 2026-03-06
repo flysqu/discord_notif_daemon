@@ -36,6 +36,7 @@ USER_ID = None
 USER_TOKEN = os.environ.get("DISCORD_TOKEN", "")
 GATEWAY_URL = "wss://gateway.discord.gg/?v=9&encoding=json"
 DISCORD_CLIENT_PROCESS = os.environ.get("DISCORD_CLIENT_PROCESS", "harbour-saildiscord")
+NOTIFICATION_BACKEND = os.environ.get("NOTIFICATION_BACKEND", "gdbus")  # "gdbus" or "notify-send"
 DISSENT_RUNNING = False
 
 if not USER_TOKEN:
@@ -160,15 +161,25 @@ async def handle_message(msg):
     # Fetch the avatar image
     avatar_path = await get_avatar(msg["author"])
 
-    # Send notification using notify-send
+    icon = avatar_path if avatar_path else ""
     try:
-        command = [
-            "notify-send",
-            "-a", "Discord",  # Set app name to "Discord"
-            "-i", avatar_path if avatar_path else "dialog-information",  # Use avatar image or fallback icon
-            f"{author}",  # Notification title
-            content  # Notification body
-        ]
+        if NOTIFICATION_BACKEND == "notify-send":
+            command = [
+                "notify-send",
+                "-a", "Discord",
+                "-i", icon if icon else "dialog-information",
+                author,
+                content
+            ]
+        else:  # gdbus
+            command = [
+                "gdbus", "call", "--session",
+                "--dest", "org.freedesktop.Notifications",
+                "--object-path", "/org/freedesktop/Notifications",
+                "--method", "org.freedesktop.Notifications.Notify",
+                "Discord", "uint32 0", icon, author, content,
+                "@as []", "@a{sv} {}", "int32 5000"
+            ]
         subprocess.run(command, check=True)
     except Exception as e:
         print(f"Failed to send notification: {e}")
