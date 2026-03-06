@@ -3,14 +3,11 @@ Description=Discord Notification Daemon
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 /home/user/gitclones/discord_notif_daemon/discord_notif_daemon.py
+ExecStart=/usr/bin/python3 %h/discord_notif_daemon/discord_notif_daemon.py
 Type=simple
 Restart=always
-User=flysqu
-WorkingDirectory=/home/user/gitclones/discord_notif_daemon
-Environment="PYTHONUNBUFFERED=1"
-Environment="DISPLAY=:0"
-Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+WorkingDirectory=%h/discord_notif_daemon
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
