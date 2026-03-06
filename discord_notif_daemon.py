@@ -178,7 +178,7 @@ async def handle_message(msg):
                 "--object-path", "/org/freedesktop/Notifications",
                 "--method", "org.freedesktop.Notifications.Notify",
                 "Discord", "uint32 0", icon, author, content,
-                "@as []", "@a{sv} {}", "int32 5000"
+                "@as []", "@a{sv} {}", "int32 0"
             ]
         subprocess.run(command, check=True)
     except Exception as e:
