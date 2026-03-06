@@ -17,20 +17,63 @@ USERNAME = pwd.getpwuid(os.getuid())[0]
 HOME_DIR = os.path.expanduser('~')
 CONFIG_DIR = os.path.join(HOME_DIR, '.config', 'discord_notif_daemon')
 
+def load_env_file():
+    env_path = Path(__file__).parent / '.env'
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, _, value = line.partition('=')
+                    os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+    else:
+        print("Warning: .env file not found. Set DISCORD_TOKEN environment variable manually.")
+
+load_env_file()
+
 # GLOBAL VARIABLES
 USER_ID = None
-USER_TOKEN = "MTIzMDk4NDA1NTg4MTcyODAzNQ.GqtYEu.tWOcF5gHmKF9O2KTKnh7A5_E7h26z8jbQu4UjQ"
+USER_TOKEN = os.environ.get("DISCORD_TOKEN", "")
 GATEWAY_URL = "wss://gateway.discord.gg/?v=9&encoding=json"
-DISSENT_PROCESS_NAME = "dissent"
+DISCORD_CLIENT_PROCESS = os.environ.get("DISCORD_CLIENT_PROCESS", "harbour-saildiscord")
 DISSENT_RUNNING = False
+
+if not USER_TOKEN:
+    print("Error: DISCORD_TOKEN not set. Add it to .env file.")
+    sys.exit(1)
 
 # Global variable to track shutdown
 SHUTDOWN_EVENT = asyncio.Event()
 
-async def is_program_running(program_name):
-    for proc in psutil.process_iter(['name']):
-        if program_name in proc.info['name']:
-            return True
+async def is_discord_client_focused():
+    """Returns True if the Discord client is the topmost (focused) window.
+
+    Calls org.nemomobile.compositor.privateTopmostWindowProcessId to get the
+    focused window's PID (returns 0 for home screen), then checks if that
+    process is our Discord client. Falls back to False (send notifications)
+    if the query fails.
+    """
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            'dbus-send', '--session', '--print-reply',
+            '--dest=org.nemomobile.lipstick', '/',
+            'org.nemomobile.compositor.privateTopmostWindowProcessId',
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=1.0)
+        output = stdout.decode()
+        # Output: "   int32 <pid>"  (0 = home screen / nothing focused)
+        for token in output.split():
+            try:
+                pid = int(token)
+                if pid > 0:
+                    p = psutil.Process(pid)
+                    return DISCORD_CLIENT_PROCESS in p.name()
+            except (ValueError, psutil.NoSuchProcess):
+                continue
+    except Exception as e:
+        print(f"[focus check] D-Bus query failed: {e}")
     return False
 
 async def get_avatar(author):
@@ -171,20 +214,20 @@ async def listen():
                     }))
 
                     while not SHUTDOWN_EVENT.is_set():
-                        # Check Dissent status first
-                        is_running = await is_program_running("dissent")
-                        
-                        if is_running and not dissent_running:
-                            print("Dissent is now running, Skipping messages until closed.")
+                        # Suppress notifications only while the Discord client is focused
+                        is_focused = await is_discord_client_focused()
+
+                        if is_focused and not dissent_running:
+                            print(f"{DISCORD_CLIENT_PROCESS} is focused, suppressing notifications.")
                             dissent_running = True
-                        elif not is_running and dissent_running:
-                            print("Dissent is closed.")
+                        elif not is_focused and dissent_running:
+                            print(f"{DISCORD_CLIENT_PROCESS} lost focus, resuming notifications.")
                             dissent_running = False
-                        
-                        # Set a timeout for ws.recv() to allow checking Dissent status
+
+                        # Set a timeout for ws.recv() to allow checking focus status
                         try:
                             msg = await asyncio.wait_for(ws.recv(), timeout=0.5)
-                            if not dissent_running: # Only process messages if Dissent is not running
+                            if not dissent_running:  # Only notify if app is not focused
                                 data = json.loads(msg)
                                 if data["t"] == "READY":
                                     USER_ID = data["d"]["user"]["id"]
