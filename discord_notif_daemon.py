@@ -10,6 +10,7 @@ import sys
 import select
 import subprocess  # For calling notify-send
 import re
+import dbus
 import os
 import pwd
 
@@ -37,7 +38,7 @@ USER_ID = None
 USER_TOKEN = os.environ.get("DISCORD_TOKEN", "")
 GATEWAY_URL = "wss://gateway.discord.gg/?v=9&encoding=json"
 DISCORD_CLIENT_PROCESS = os.environ.get("DISCORD_CLIENT_PROCESS", "harbour-saildiscord")
-NOTIFICATION_BACKEND = os.environ.get("NOTIFICATION_BACKEND", "gdbus")  # "gdbus" or "notify-send"
+NOTIFICATION_BACKEND = os.environ.get("NOTIFICATION_BACKEND", "dbus")  # "dbus", "gdbus", or "notify-send"
 
 # Per-user notification state for grouping: {user_id: (notif_id, [messages])}
 USER_NOTIFICATIONS = {}
@@ -187,6 +188,23 @@ async def handle_message(msg):
             ]
             proc = await asyncio.create_subprocess_exec(*command)
             await proc.wait()
+        elif NOTIFICATION_BACKEND == "dbus":
+            loop = asyncio.get_event_loop()
+            def _notify():
+                bus = dbus.SessionBus()
+                obj = bus.get_object('org.freedesktop.Notifications', '/org/freedesktop/Notifications')
+                iface = dbus.Interface(obj, 'org.freedesktop.Notifications')
+                hints = dbus.Dictionary({
+                    'x-nemo-preview-summary': dbus.String(author),
+                    'x-nemo-preview-body': dbus.String(messages[-1]),
+                    'category': dbus.String('im.received'),
+                }, signature='sv')
+                return int(iface.Notify(
+                    'Discord', dbus.UInt32(notif_id), icon, author, body,
+                    dbus.Array([], signature='s'), hints, dbus.Int32(0)
+                ))
+            new_id = await loop.run_in_executor(None, _notify)
+            USER_NOTIFICATIONS[user_id] = (new_id, messages)
         else:  # gdbus
             proc = await asyncio.create_subprocess_exec(
                 "gdbus", "call", "--session",
@@ -199,7 +217,6 @@ async def handle_message(msg):
                 stderr=asyncio.subprocess.DEVNULL,
             )
             stdout, _ = await proc.communicate()
-            # Parse returned notification ID: output like "(uint32 5,)\n"
             match = re.search(r'uint32 (\d+)', stdout.decode())
             new_id = int(match.group(1)) if match else 0
             USER_NOTIFICATIONS[user_id] = (new_id, messages)
