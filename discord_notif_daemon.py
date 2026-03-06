@@ -9,6 +9,7 @@ import signal
 import sys
 import select
 import subprocess  # For calling notify-send
+import re
 import os
 import pwd
 
@@ -37,6 +38,9 @@ USER_TOKEN = os.environ.get("DISCORD_TOKEN", "")
 GATEWAY_URL = "wss://gateway.discord.gg/?v=9&encoding=json"
 DISCORD_CLIENT_PROCESS = os.environ.get("DISCORD_CLIENT_PROCESS", "harbour-saildiscord")
 NOTIFICATION_BACKEND = os.environ.get("NOTIFICATION_BACKEND", "gdbus")  # "gdbus" or "notify-send"
+
+# Per-user notification state for grouping: {user_id: (notif_id, [messages])}
+USER_NOTIFICATIONS = {}
 DISSENT_RUNNING = False
 
 if not USER_TOKEN:
@@ -156,31 +160,49 @@ async def handle_message(msg):
     author = msg["author"]["global_name"]
     content = msg["content"]
     channel_id = msg["channel_id"]
+    user_id = msg["author"]["id"]
     print(f"[{channel_id}] {author}: {content}")
 
-    # Fetch the avatar image
     avatar_path = await get_avatar(msg["author"])
-
     icon = avatar_path if avatar_path else ""
+
+    # Group messages from same user into one notification (up to 5)
+    if user_id in USER_NOTIFICATIONS:
+        notif_id, messages = USER_NOTIFICATIONS[user_id]
+        messages.append(content)
+        if len(messages) > 5:
+            messages = messages[-5:]
+    else:
+        notif_id = 0
+        messages = [content]
+
+    body = '\n'.join(messages)
+
     try:
         if NOTIFICATION_BACKEND == "notify-send":
             command = [
-                "notify-send",
-                "-a", "Discord",
+                "notify-send", "-a", "Discord",
                 "-i", icon if icon else "dialog-information",
-                author,
-                content
+                author, body
             ]
+            proc = await asyncio.create_subprocess_exec(*command)
+            await proc.wait()
         else:  # gdbus
-            command = [
+            proc = await asyncio.create_subprocess_exec(
                 "gdbus", "call", "--session",
                 "--dest", "org.freedesktop.Notifications",
                 "--object-path", "/org/freedesktop/Notifications",
                 "--method", "org.freedesktop.Notifications.Notify",
-                "Discord", "uint32 0", icon, author, content,
-                "@as []", "@a{sv} {}", "int32 0"
-            ]
-        subprocess.run(command, check=True)
+                "Discord", f"uint32 {notif_id}", icon, author, body,
+                "@as []", "@a{sv} {}", "int32 0",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await proc.communicate()
+            # Parse returned notification ID: output like "(uint32 5,)\n"
+            match = re.search(r'uint32 (\d+)', stdout.decode())
+            new_id = int(match.group(1)) if match else 0
+            USER_NOTIFICATIONS[user_id] = (new_id, messages)
     except Exception as e:
         print(f"Failed to send notification: {e}")
 
