@@ -167,16 +167,17 @@ async def handle_message(msg):
     avatar_path = await get_avatar(msg["author"])
     icon = avatar_path if avatar_path else ""
 
-    # Group messages from same user into one notification (up to 5)
+    # Group message text from same user (up to 5), but always use a new notification
+    # so that each message triggers sound/vibration feedback
     if user_id in USER_NOTIFICATIONS:
-        notif_id, messages = USER_NOTIFICATIONS[user_id]
+        _, messages = USER_NOTIFICATIONS[user_id]
         messages.append(content)
         if len(messages) > 5:
             messages = messages[-5:]
     else:
-        notif_id = 0
         messages = [content]
 
+    notif_id = 0  # Always create new notification to trigger sound
     body = '\n'.join(messages)
 
     try:
@@ -194,14 +195,19 @@ async def handle_message(msg):
                 bus = dbus.SessionBus()
                 obj = bus.get_object('org.freedesktop.Notifications', '/org/freedesktop/Notifications')
                 iface = dbus.Interface(obj, 'org.freedesktop.Notifications')
+                if notif_id:
+                    try:
+                        iface.CloseNotification(dbus.UInt32(notif_id))
+                    except Exception:
+                        pass
                 hints = dbus.Dictionary({
                     'x-nemo-preview-summary': dbus.String(author),
                     'x-nemo-preview-body': dbus.String(messages[-1]),
                     'category': dbus.String('x-nemo.messaging.im'),
-                    'x-nemo-feedback': dbus.String('messaging'),
+                    'x-nemo-feedback': dbus.String('chat'),
                 }, signature='sv')
                 return int(iface.Notify(
-                    'Discord', dbus.UInt32(notif_id), icon, author, body,
+                    'Discord', dbus.UInt32(0), icon, author, body,
                     dbus.Array([], signature='s'), hints, dbus.Int32(0)
                 ))
             new_id = await loop.run_in_executor(None, _notify)
